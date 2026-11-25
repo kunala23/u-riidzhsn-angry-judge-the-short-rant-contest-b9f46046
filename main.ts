@@ -4,12 +4,15 @@
 // /output/entry.txt. The rant is assembled from fixed parts, so both
 // grading runs produce exactly the same text. The program checks the
 // gate itself before writing: UTF-8 text of 1 to 400 characters,
-// not only white space.
+// not only white space, and a single line (no newline characters).
+// After writing it reads the file back and verifies the on-disk
+// content matches the rant exactly, so a truncated or failed write
+// cannot pass silently.
 //
 // Run: node main.ts            (writes /output/entry.txt)
 //      node main.ts <out-dir>  (local test: writes <out-dir>/entry.txt)
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const MAX_CHARS = 400;
@@ -37,10 +40,24 @@ function main(): void {
   if (rant.trim().length === 0) {
     throw new Error("Rant is only whitespace; the gate needs real text.");
   }
+  if (/[\r\n]/.test(rant)) {
+    throw new Error("Rant must be a single line; newlines break the gate.");
+  }
+  // Every part must contribute real text, and joining must not create
+  // accidental double spaces.
+  if (/\s{2,}/.test(rant)) {
+    throw new Error("Rant contains a double space; check the part joins.");
+  }
   const outDir = process.argv[2] ?? "/output";
   mkdirSync(outDir, { recursive: true });
   const outFile = join(outDir, "entry.txt");
   writeFileSync(outFile, rant, "utf8");
+  // Post-write verification: what landed on disk must be exactly
+  // the rant that passed the gate above.
+  const written = readFileSync(outFile, "utf8");
+  if (written !== rant) {
+    throw new Error("Written entry.txt does not match the verified rant.");
+  }
   console.log(`Wrote ${length} characters to ${outFile}`);
 }
 
